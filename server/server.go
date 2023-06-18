@@ -37,20 +37,14 @@ type Room struct {
 }
 
 func New() *Server {
-
-	httpServer := fiber.New(fiber.Config{
-		BodyLimit: 2000 * 1024 * 1024, // this is the default limit of 4MB
-	})
-
 	clients := make(map[string]string, 0)
 	rooms := make(map[string]*Room, 0)
 
-	httpServer.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
-	}))
-
+	httpServer := fiber.New(fiber.Config{
+		BodyLimit: 1 * 1024 * 1024, // this is the default limit of 1MB
+	})
+	httpServer.Use(cors.New(cors.Config{AllowOrigins: "*"}))
 	httpServer.Use(logger.New())
-	httpServer.Use(cors.New(cors.Config{}))
 
 	ws := httpServer.Group("/ws")
 
@@ -62,22 +56,17 @@ func New() *Server {
 			c.Locals("allowed", true)
 			return c.Next()
 		}
-
 		return fiber.ErrUpgradeRequired
 	})
-	// Multiple event handling supported
-	ikisocket.On(ikisocket.EventConnect, func(ep *ikisocket.EventPayload) {
-		fmt.Println(fmt.Sprintf("Connection event 1 - User: %s", ep.Kws.GetStringAttribute("user_id")))
-	})
 
+	// On connection event
 	ikisocket.On(ikisocket.EventConnect, func(ep *ikisocket.EventPayload) {
-		fmt.Println(fmt.Sprintf("Connection event 2 - User: %s", ep.Kws.GetStringAttribute("user_id")))
+		fmt.Println(fmt.Printf("Connection event - User: %s", ep.Kws.GetStringAttribute("user_id")))
 	})
 
 	// On message event
 	ikisocket.On(ikisocket.EventMessage, func(ep *ikisocket.EventPayload) {
-
-		fmt.Println(fmt.Sprintf("Message event - User: %s - Message: %s", ep.Kws.GetStringAttribute("user_id"), string(ep.Data)))
+		fmt.Println(fmt.Printf("Message event - User: %s - Message: %s", ep.Kws.GetStringAttribute("user_id"), string(ep.Data)))
 
 		message := MessageObject{}
 
@@ -123,7 +112,7 @@ func New() *Server {
 	ikisocket.On(ikisocket.EventDisconnect, func(ep *ikisocket.EventPayload) {
 		// Remove the user from the local clients
 		delete(clients, ep.Kws.GetStringAttribute("user_id"))
-		fmt.Println(fmt.Sprintf("Disconnection event - User: %s", ep.Kws.GetStringAttribute("user_id")))
+		fmt.Println(fmt.Printf("Disconnection event - User: %s", ep.Kws.GetStringAttribute("user_id")))
 	})
 
 	// On close event
@@ -131,15 +120,15 @@ func New() *Server {
 	ikisocket.On(ikisocket.EventClose, func(ep *ikisocket.EventPayload) {
 		// Remove the user from the local clients
 		delete(clients, ep.Kws.GetStringAttribute("user_id"))
-		fmt.Println(fmt.Sprintf("Close event - User: %s", ep.Kws.GetStringAttribute("user_id")))
+		fmt.Println(fmt.Printf("Close event - User: %s", ep.Kws.GetStringAttribute("user_id")))
 	})
 
 	// On error event
 	ikisocket.On(ikisocket.EventError, func(ep *ikisocket.EventPayload) {
-		fmt.Println(fmt.Sprintf("Error event - User: %s", ep.Kws.GetStringAttribute("user_id")))
+		fmt.Println(fmt.Printf("Error event - User: %s", ep.Kws.GetStringAttribute("user_id")))
 	})
-	httpServer.Get("/ws", ikisocket.New(func(kws *ikisocket.Websocket) {
 
+	httpServer.Get("/ws", ikisocket.New(func(kws *ikisocket.Websocket) {
 		// Retrieve the user id from endpoint
 		//userId := kws.Params("id")
 		userId := RandId()
@@ -165,6 +154,7 @@ func New() *Server {
 		rooms:   rooms,
 	}
 }
+
 
 func RandId() string {
 	length := 8
@@ -205,5 +195,8 @@ func (s *Server) Start() {
 
 func (s *Server) Stop() {
 	fmt.Println("Server stopped")
-	s.http.Shutdown()
+	err :=  s.http.Shutdown()
+	if err != nil {
+		log.Fatal(err)
+	}
 }
